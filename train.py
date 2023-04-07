@@ -15,6 +15,10 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 from PIL import Image
 
+# for ignoring warnings
+import warnings
+warnings.filterwarnings('ignore')
+
 IMG_SIZE = 480
 VALIDATION_RATIO = 0.1
 BATCH_SIZE = 10
@@ -102,7 +106,7 @@ valid_size = int(VALIDATION_RATIO * len(full_ds))
 train_size = len(full_ds) - valid_size
 train_ds, valid_ds = torch.utils.data.random_split(full_ds, [train_size, valid_size])
 train_dl = torch.utils.data.DataLoader(train_ds, BATCH_SIZE, shuffle=True, num_workers=4, collate_fn=collate_fn)
-valid_dl = torch.utils.data.DataLoader(valid_ds, BATCH_SIZE, shuffle=False, num_workers=4, collate_fn=collate_fn)
+valid_dl = torch.utils.data.DataLoader(valid_ds, valid_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
 img, annotations = train_ds[0]
 plot_img_bbox(img, annotations)
   
@@ -115,26 +119,42 @@ model.roi_heads.box_predictor = FastRCNNPredictor(in_features, NUM_CLASSES + 1)
 # put the model on the gpu if available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 model.to(device)
+print(f'Running on: {device}')
 
 # construct an optimizer
 params = [p for p in model.parameters() if p.requires_grad]
 optimizer = torch.optim.Adam(params, lr=0.001)
 
 # train the model
+loss_hist_train = [0] * NUM_EPOCHS
+loss_hist_valid = [0] * NUM_EPOCHS
 for epoch in range(NUM_EPOCHS):
     start = time.time()
     model.train()
-    epoch_loss = 0
     for imgs, annotations in train_dl:
         imgs = list(img.to(device) for img in imgs)
         annotations = [{k: v.to(device) for k, v in t.items()} for t in annotations]
-        print(annotations)
-        loss_dict = model(imgs, annotations) 
+        loss_dict = model(imgs, annotations)
         losses = sum(loss for loss in loss_dict.values())        
         optimizer.zero_grad()
         losses.backward()
         optimizer.step() 
-        epoch_loss += losses
-    print(f'epoch : {epoch+1}, Loss : {epoch_loss}, time : {time.time() - start}')
+        loss_hist_train[epoch] += losses
 
-torch.save(model.state_dict(), f'./model_state_dict_{int(time.time())}')
+    model.eval()
+    with torch.no_grad():
+      for imgs, annotations in valid_dl:
+        imgs = list(img.to(device) for img in imgs)
+        annotations = [{k: v.to(device) for k, v in t.items()} for t in annotations]
+        preds = model(imgs)
+        if len(preds) > 0 and 'boxes' in preds[0] and len(preds[0]["boxes"]) > 0:
+          preds = torch.stack([pred['boxes'][0] for pred in preds], dim=0)
+          annotations = torch.stack([annotation['boxes'][0] for annotation in annotations], dim=0)
+          loss_fn = torch.nn.MSELoss()
+          loss_hist_valid[epoch] += loss_fn(preds, annotations)
+        else:
+          loss_hist_valid[epoch] = 'N/A (no box predictions)'
+
+    print(f'epoch: {epoch+1}, Train loss: {loss_hist_train[epoch]}, Validation loss: {loss_hist_valid[epoch]}')
+
+torch.save(model.state_dict(), f'./model_state_{int(time.time())}.dict')
