@@ -8,7 +8,8 @@ import numpy as np
 import warnings
 warnings.filterwarnings('ignore')
 
-# We will be reading images using OpenCV
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import cv2
 
 # torchvision libraries
@@ -18,6 +19,10 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 # for image augmentations
 from albumentations.pytorch.transforms import ToTensorV2
+
+if len(sys.argv) != 3:
+  print(f'usage: {sys.argv[0]} <image file> <model dict file>')
+  exit(0)
 
 image_path = sys.argv[1]
 
@@ -47,7 +52,7 @@ num_classes = 2
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes) 
 
 # load parameters that were trained on locating mrz areas
-model.load_state_dict(torch.load('model.dict', map_location=torch.device('cpu')))
+model.load_state_dict(torch.load(sys.argv[2], map_location=torch.device('cpu')))
 model.eval()
 
 # get predictions for current image
@@ -59,3 +64,23 @@ with torch.no_grad():
 nms_prediction = apply_nms(prediction, iou_thresh=0.01)
 
 print(nms_prediction)
+
+def plot_img_bbox(img, target):
+  fig, a = plt.subplots(1,1)
+  fig.set_size_inches(5,5)
+  a.imshow(img.numpy().transpose((1,2,0)))
+  box= target['boxes'][0]
+  # Convert to x-min y-min width height
+  x, y, width, height  = box[0], box[1], box[2]-box[0], box[3]-box[1]
+  rect = patches.Rectangle(
+    (x, y),
+    width, height,
+    linewidth = 2,
+    edgecolor = 'r',
+    facecolor = 'none'
+  )
+  # Draw the bounding box on top of the image
+  a.add_patch(rect)
+  plt.show()
+
+plot_img_bbox(img, nms_prediction)

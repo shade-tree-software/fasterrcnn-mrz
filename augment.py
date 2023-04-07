@@ -2,7 +2,6 @@ from PIL import Image
 import sys
 import os
 import numpy as np
-import torch
 from torchvision import transforms as T
 
 offsets = [

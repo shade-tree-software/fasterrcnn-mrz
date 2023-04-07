@@ -20,10 +20,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 IMG_SIZE = 480
-VALIDATION_RATIO = 0.1
+VALIDATION_RATIO = 0.2
 BATCH_SIZE = 10
 NUM_CLASSES = 1
-NUM_EPOCHS = 5
+NUM_EPOCHS = 10
 
 # defining the files directory and testing directory
 train_dir = sys.argv[1] + '/train/'
@@ -42,9 +42,11 @@ class ImagesDataset(torch.utils.data.Dataset):
     # read image, convert to rgb, and run any transforms 
     img_name = self.imgs[idx]
     image_path = os.path.join(self.files_dir, img_name)
-    img = Image.open(image_path).convert('RGB') 
+    raw_img = Image.open(image_path)
+    img = raw_img.convert('RGB') 
     if self.transforms is not None:
       img = self.transforms(img)
+    raw_img.close()
     
     # read annotations and convert from percentages to pixels
     annot_filename = img_name[:-4] + '.txt'
@@ -106,7 +108,7 @@ valid_size = int(VALIDATION_RATIO * len(full_ds))
 train_size = len(full_ds) - valid_size
 train_ds, valid_ds = torch.utils.data.random_split(full_ds, [train_size, valid_size])
 train_dl = torch.utils.data.DataLoader(train_ds, BATCH_SIZE, shuffle=True, num_workers=4, collate_fn=collate_fn)
-valid_dl = torch.utils.data.DataLoader(valid_ds, valid_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
+valid_dl = torch.utils.data.DataLoader(valid_ds, BATCH_SIZE, shuffle=False, num_workers=4, collate_fn=collate_fn)
 img, annotations = train_ds[0]
 plot_img_bbox(img, annotations)
   
@@ -129,9 +131,11 @@ optimizer = torch.optim.Adam(params, lr=0.001)
 loss_hist_train = [0] * NUM_EPOCHS
 loss_hist_valid = [0] * NUM_EPOCHS
 for epoch in range(NUM_EPOCHS):
+    print(f'Starting epoch {epoch+1}')
     start = time.time()
     model.train()
-    for imgs, annotations in train_dl:
+    for index, [imgs, annotations] in enumerate(train_dl):
+        print(f'Batch {index}')
         imgs = list(img.to(device) for img in imgs)
         annotations = [{k: v.to(device) for k, v in t.items()} for t in annotations]
         loss_dict = model(imgs, annotations)
@@ -141,9 +145,12 @@ for epoch in range(NUM_EPOCHS):
         optimizer.step() 
         loss_hist_train[epoch] += losses
 
+    print('Validating...')
     model.eval()
     with torch.no_grad():
-      for imgs, annotations in valid_dl:
+      for index, [imgs, annotations] in enumerate(valid_dl):
+        print(f'Batch {index}')
+        batch_count = index + 1
         imgs = list(img.to(device) for img in imgs)
         annotations = [{k: v.to(device) for k, v in t.items()} for t in annotations]
         preds = model(imgs)
@@ -153,7 +160,8 @@ for epoch in range(NUM_EPOCHS):
           loss_fn = torch.nn.MSELoss()
           loss_hist_valid[epoch] += loss_fn(preds, annotations)
         else:
-          loss_hist_valid[epoch] = 'N/A (no box predictions)'
+          loss_hist_valid[epoch] += 0
+      loss_hist_valid[epoch] /= batch_count
 
     print(f'epoch: {epoch+1}, Train loss: {loss_hist_train[epoch]}, Validation loss: {loss_hist_valid[epoch]}')
 
