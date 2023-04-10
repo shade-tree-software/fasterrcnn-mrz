@@ -4,6 +4,19 @@ import os
 import numpy as np
 from torchvision import transforms as T
 
+if len(sys.argv) != 2:
+  print()
+  print('Creates additional labeled training data for object detection projects by')
+  print('taking images and their yolo-formatted object detection annotation files and')
+  print('padding the images in nine different ways, thereby creating nine new image')
+  print('files for each original image file.  Each of the new images is given a new')
+  print('annotation file in which the bounding boxes have been updated to reflect the')
+  print('changes introduced by the padding.')
+  print()
+  print(f'usage: {sys.argv[0]} <images and annotations directory>')
+  print()
+  exit(0)
+
 offsets = [
   [0.5, 0.0],
   [0.25, 0.0],
