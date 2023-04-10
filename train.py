@@ -56,8 +56,7 @@ class ImagesDataset(torch.utils.data.Dataset):
       for line in f:      
         class_label, box_center_x_pct, box_center_y_pct, box_width_pct, box_height_pct = \
             [float(x) for x in line.split(' ')]
-        #annotations['labels'].append(int(class_label) + 1)
-        annotations['labels'].append(1)
+        annotations['labels'].append(int(class_label) + 1)
         box_min_x_pct = box_center_x_pct - box_width_pct/2
         box_max_x_pct = box_center_x_pct + box_width_pct/2
         box_min_y_pct = box_center_y_pct - box_height_pct/2
